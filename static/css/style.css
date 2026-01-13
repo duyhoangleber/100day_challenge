@@ -5,10 +5,12 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     padding: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .container {
@@ -35,8 +37,10 @@ header h1 {
     display: flex !important;
     flex-direction: row !important;
     width: 100% !important;
+    max-width: 100% !important;
     align-items: stretch;
     gap: 0;
+    overflow: hidden;
 }
 
 .overview-section {
@@ -49,6 +53,8 @@ header h1 {
     flex-direction: column;
     justify-content: flex-start;
     border-right: 2px solid #d0d0d0;
+    overflow: hidden;
+    min-width: 0;
 }
 
 .overview-section h2 {
@@ -90,6 +96,11 @@ header h1 {
     font-size: 0.85em;
     color: #666;
     font-weight: 500;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .stat-value {
@@ -98,6 +109,7 @@ header h1 {
     color: #667eea;
     min-width: 50px;
     text-align: right;
+    flex-shrink: 0;
 }
 
 /* Tasks List Section */
@@ -110,6 +122,8 @@ header h1 {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    overflow: hidden;
+    min-width: 0;
 }
 
 .tasks-list-header {
@@ -119,6 +133,8 @@ header h1 {
     margin: 0 0 10px 0;
     padding: 0;
     height: 32px;
+    min-width: 0;
+    gap: 8px;
 }
 
 .tasks-list-header h2 {
@@ -130,6 +146,11 @@ header h1 {
     display: flex;
     align-items: center;
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tasks-list {
@@ -257,6 +278,8 @@ header h1 {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 10px;
+    width: 100%;
+    max-width: 100%;
 }
 
 .day-card {
@@ -279,6 +302,13 @@ header h1 {
     background: transparent;
     border: none;
     cursor: default;
+}
+
+/* Hide empty cells on mobile */
+@media (max-width: 428px) {
+    .day-card.empty {
+        display: none;
+    }
 }
 
 .day-card.empty:hover {
@@ -644,39 +674,323 @@ header h1 {
     }
 }
 
-@media (max-width: 768px) {
-    .week-row {
+/* iPhone 12 and similar (390px width) */
+@media (max-width: 428px) {
+    body {
+        padding: 8px;
+        overflow-x: hidden;
+    }
+    
+    .container {
+        max-width: 100%;
+        width: 100%;
+        overflow-x: hidden;
+    }
+    
+    header {
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        border-radius: 12px;
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+    
+    header h1 {
+        font-size: 1.3em;
+        margin-bottom: 10px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .header-content {
+        flex-direction: column !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    .overview-section {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 100% !important;
+        padding: 0 0 15px 0 !important;
+        border-right: none !important;
+        border-bottom: 2px solid #d0d0d0;
+    }
+    
+    .overview-section h2,
+    .tasks-list-header h2 {
+        font-size: 0.95em;
+        height: 26px;
+        margin-bottom: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .stats {
         gap: 5px;
+        width: 100%;
+    }
+    
+    .stat-item {
+        padding: 5px 8px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .stat-label {
+        font-size: 0.7em;
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .stat-value {
+        font-size: 1em;
+        min-width: 40px;
+    }
+    
+    .tasks-list-section {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 100% !important;
+        padding: 15px 0 0 0 !important;
+    }
+    
+    .tasks-list-header {
+        height: 26px;
+        margin-bottom: 8px;
+        width: 100%;
+    }
+    
+    .tasks-list-header h2 {
+        font-size: 0.95em;
+    }
+    
+    .btn-small {
+        padding: 4px 8px;
+        font-size: 0.7em;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    
+    .tasks-list {
+        max-height: 90px;
+        gap: 4px;
+        width: 100%;
+    }
+    
+    .task-item {
+        padding: 3px 6px;
+        font-size: 0.7em;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .task-name {
+        max-width: calc(100% - 30px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .btn-delete-task {
+        width: 14px;
+        height: 14px;
+        font-size: 0.9em;
+    }
+    
+    .calendar-container {
+        padding: 12px;
+        border-radius: 12px;
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+    
+    .calendar-grid {
+        width: 100%;
+        overflow: hidden;
+    }
+    
+    .week-row {
+        gap: 4px;
+        width: 100%;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     
     .day-card {
-        min-height: 80px;
-        padding: 5px;
+        min-height: 70px;
+        padding: 5px 3px;
+        border-radius: 8px;
+        border-width: 1.5px;
+        width: 100%;
+        box-sizing: border-box;
+        aspect-ratio: 1;
+    }
+    
+    .day-label {
+        font-size: 0.6em;
+        margin-bottom: 2px;
     }
     
     .day-number {
-        font-size: 0.9em;
+        font-size: 0.85em;
+        margin-bottom: 2px;
     }
     
     .day-date {
         font-size: 0.55em;
+        margin-bottom: 2px;
     }
     
     .day-progress {
+        font-size: 0.6em;
+        padding: 2px 5px;
+        margin-top: 3px;
+    }
+    
+    .day-locked {
         font-size: 0.65em;
-        padding: 2px 6px;
+        top: 2px;
+        right: 2px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+        padding: 15px;
+        max-height: 90vh;
+        border-radius: 12px;
+        box-sizing: border-box;
+        overflow-y: auto;
+    }
+    
+    .modal-content.modal-small {
+        padding: 12px;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.1em;
+        margin-bottom: 12px;
+        word-wrap: break-word;
+    }
+    
+    .day-tasks-list {
+        max-height: 250px;
+        margin-bottom: 12px;
+        overflow-y: auto;
+    }
+    
+    .day-task-item {
+        padding: 10px;
+        margin-bottom: 6px;
+    }
+    
+    .task-checkbox {
+        width: 18px;
+        height: 18px;
+    }
+    
+    .task-text {
+        font-size: 0.85em;
+    }
+    
+    #dayNotesTextarea {
+        min-height: 70px;
+        padding: 10px;
+        font-size: 0.85em;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .edit-task-form input {
+        padding: 10px;
+        font-size: 0.85em;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .btn {
+        padding: 8px 16px;
+        font-size: 0.85em;
+    }
+    
+    .modal-buttons {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .close {
+        font-size: 22px;
+    }
+}
+
+/* iPhone 12 specific (390px) */
+@media (max-width: 390px) {
+    body {
+        padding: 6px;
+    }
+    
+    header {
+        padding: 8px 10px;
     }
     
     header h1 {
-        font-size: 2em;
+        font-size: 1.2em;
     }
     
-    .stats {
-        gap: 10px;
+    .day-card {
+        min-height: 38px;
+        padding: 2px 1px;
+    }
+    
+    .day-label {
+        font-size: 0.48em;
+    }
+    
+    .day-number {
+        font-size: 0.65em;
+    }
+    
+    .day-date {
+        font-size: 0.42em;
+    }
+    
+    .day-progress {
+        font-size: 0.48em;
+        padding: 1px 2px;
+    }
+    
+    .week-row {
+        gap: 3px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    
+    .calendar-container {
+        padding: 10px;
+    }
+    
+    .day-card {
+        min-height: 65px;
+        padding: 4px 2px;
+    }
+    
+    .stat-label {
+        font-size: 0.65em;
     }
     
     .stat-value {
-        font-size: 1.5em;
+        font-size: 0.95em;
+        min-width: 35px;
+    }
+    
+    .tasks-list {
+        max-height: 80px;
+    }
+    
+    .task-item {
+        font-size: 0.65em;
+        padding: 2px 5px;
     }
 }
 
