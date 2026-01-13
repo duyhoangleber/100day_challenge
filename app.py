@@ -1,61 +1,138 @@
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime, timedelta
-import sqlite3
 import os
+import sqlite3
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Database file
+# Database configuration - use Supabase if DATABASE_URL is set, otherwise use SQLite for local dev
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
+USE_SUPABASE = DATABASE_URL and 'supabase.co' in DATABASE_URL and not DATABASE_URL.startswith('db.xxx')
+
+# SQLite fallback for local development
 DB_FILE = '100day_challenge.db'
+
+def get_db_connection():
+    """Get database connection - Supabase PostgreSQL or SQLite fallback"""
+    if USE_SUPABASE:
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            conn = psycopg2.connect(DATABASE_URL)
+            return conn, 'postgresql'
+        except Exception as e:
+            print(f"Warning: Could not connect to Supabase: {e}")
+            print("Falling back to SQLite for local development")
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            return conn, 'sqlite'
+    else:
+        # Use SQLite for local development
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        return conn, 'sqlite'
+
+def get_cursor(conn, db_type):
+    """Get cursor with appropriate factory"""
+    if db_type == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        return conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        return conn.cursor()
+
+def execute_query(cursor, query, params, db_type):
+    """Execute query with correct placeholder style"""
+    if db_type == 'postgresql':
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+    else:
+        # Convert %s to ? for SQLite
+        sqlite_query = query.replace('%s', '?')
+        if params:
+            cursor.execute(sqlite_query, params)
+        else:
+            cursor.execute(sqlite_query)
 
 def init_db():
     """Initialize database with tasks table"""
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
+    conn, db_type = get_db_connection()
+    cursor = conn.cursor()
     
-    # Tasks list table - common tasks for all days
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS tasks_list (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_name TEXT NOT NULL,
-            task_order INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Daily tasks - track completion of each task for each day
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS daily_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            day_number INTEGER NOT NULL,
-            task_id INTEGER NOT NULL,
-            completed INTEGER DEFAULT 0,
-            FOREIGN KEY (task_id) REFERENCES tasks_list(id),
-            UNIQUE(day_number, task_id)
-        )
-    ''')
-    
-    # Day notes table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS day_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            day_number INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(day_number)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-def get_db_connection():
-    """Get database connection"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        if db_type == 'postgresql':
+            # PostgreSQL/Supabase schema
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks_list (
+                    id SERIAL PRIMARY KEY,
+                    task_name TEXT NOT NULL,
+                    task_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS daily_tasks (
+                    id SERIAL PRIMARY KEY,
+                    day_number INTEGER NOT NULL,
+                    task_id INTEGER NOT NULL,
+                    completed INTEGER DEFAULT 0,
+                    FOREIGN KEY (task_id) REFERENCES tasks_list(id) ON DELETE CASCADE,
+                    UNIQUE(day_number, task_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS day_notes (
+                    id SERIAL PRIMARY KEY,
+                    day_number INTEGER NOT NULL UNIQUE,
+                    date DATE NOT NULL,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        else:
+            # SQLite schema
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tasks_list (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_name TEXT NOT NULL,
+                    task_order INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS daily_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day_number INTEGER NOT NULL,
+                    task_id INTEGER NOT NULL,
+                    completed INTEGER DEFAULT 0,
+                    FOREIGN KEY (task_id) REFERENCES tasks_list(id),
+                    UNIQUE(day_number, task_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS day_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day_number INTEGER NOT NULL UNIQUE,
+                    date TEXT NOT NULL,
+                    notes TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        
+        conn.commit()
+    except Exception as e:
+        if db_type == 'postgresql':
+            conn.rollback()
+        print(f"Error initializing database: {e}")
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.route('/')
 def index():
@@ -65,10 +142,11 @@ def index():
 @app.route('/api/tasks-list', methods=['GET'])
 def get_tasks_list():
     """Get all tasks in the list"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, task_name, task_order FROM tasks_list ORDER BY task_order, id')
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    execute_query(cursor, 'SELECT id, task_name, task_order FROM tasks_list ORDER BY task_order, id', [], db_type)
     tasks = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     return jsonify([{
@@ -86,18 +164,28 @@ def add_task():
     if not task_name:
         return jsonify({'error': 'task_name is required'}), 400
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT MAX(task_order) as max_order FROM tasks_list')
-    max_order = cursor.fetchone()['max_order'] or 0
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    execute_query(cursor, 'SELECT MAX(task_order) as max_order FROM tasks_list', [], db_type)
+    result = cursor.fetchone()
+    max_order = result['max_order'] if result and result['max_order'] else 0
     
-    cursor.execute('''
-        INSERT INTO tasks_list (task_name, task_order)
-        VALUES (?, ?)
-    ''', (task_name, max_order + 1))
+    if db_type == 'postgresql':
+        execute_query(cursor, '''
+            INSERT INTO tasks_list (task_name, task_order)
+            VALUES (%s, %s)
+            RETURNING id
+        ''', (task_name, max_order + 1), db_type)
+        task_id = cursor.fetchone()['id']
+    else:
+        execute_query(cursor, '''
+            INSERT INTO tasks_list (task_name, task_order)
+            VALUES (?, ?)
+        ''', (task_name, max_order + 1), db_type)
+        task_id = cursor.lastrowid
     
-    task_id = cursor.lastrowid
     conn.commit()
+    cursor.close()
     conn.close()
     
     return jsonify({'success': True, 'id': task_id, 'task_name': task_name, 'task_order': max_order + 1})
@@ -111,10 +199,11 @@ def update_task(task_id):
     if not task_name:
         return jsonify({'error': 'task_name is required'}), 400
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE tasks_list SET task_name = ? WHERE id = ?', (task_name, task_id))
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    execute_query(cursor, 'UPDATE tasks_list SET task_name = %s WHERE id = %s', (task_name, task_id), db_type)
     conn.commit()
+    cursor.close()
     conn.close()
     
     return jsonify({'success': True})
@@ -122,11 +211,15 @@ def update_task(task_id):
 @app.route('/api/tasks-list/<int:task_id>', methods=['DELETE'])
 def delete_task(task_id):
     """Delete a task from the list"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM tasks_list WHERE id = ?', (task_id,))
-    cursor.execute('DELETE FROM daily_tasks WHERE task_id = ?', (task_id,))
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    # CASCADE will handle daily_tasks deletion for PostgreSQL
+    # For SQLite, need to delete manually
+    if db_type == 'sqlite':
+        execute_query(cursor, 'DELETE FROM daily_tasks WHERE task_id = ?', (task_id,), db_type)
+    execute_query(cursor, 'DELETE FROM tasks_list WHERE id = %s', (task_id,), db_type)
     conn.commit()
+    cursor.close()
     conn.close()
     
     return jsonify({'success': True})
@@ -134,25 +227,26 @@ def delete_task(task_id):
 @app.route('/api/days/<int:day_number>', methods=['GET'])
 def get_day_tasks(day_number):
     """Get tasks status for a specific day"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
     
     # Get all tasks
-    cursor.execute('SELECT id, task_name FROM tasks_list ORDER BY task_order, id')
+    execute_query(cursor, 'SELECT id, task_name FROM tasks_list ORDER BY task_order, id', [], db_type)
     all_tasks = cursor.fetchall()
     
     # Get completed tasks for this day
-    cursor.execute('''
+    execute_query(cursor, '''
         SELECT task_id FROM daily_tasks 
-        WHERE day_number = ? AND completed = 1
-    ''', (day_number,))
+        WHERE day_number = %s AND completed = 1
+    ''', (day_number,), db_type)
     completed_tasks = {row['task_id'] for row in cursor.fetchall()}
     
     # Get notes for this day
-    cursor.execute('SELECT notes FROM day_notes WHERE day_number = ?', (day_number,))
+    execute_query(cursor, 'SELECT notes FROM day_notes WHERE day_number = %s', (day_number,), db_type)
     notes_row = cursor.fetchone()
     notes = notes_row['notes'] if notes_row else ''
     
+    cursor.close()
     conn.close()
     
     tasks = [{
@@ -166,22 +260,24 @@ def get_day_tasks(day_number):
 @app.route('/api/days/summary', methods=['GET'])
 def get_days_summary():
     """Get summary of tasks for all days"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
     
     # Get total number of tasks
-    cursor.execute('SELECT COUNT(*) as total FROM tasks_list')
-    total_tasks = cursor.fetchone()['total'] or 0
+    execute_query(cursor, 'SELECT COUNT(*) as total FROM tasks_list', [], db_type)
+    result = cursor.fetchone()
+    total_tasks = result['total'] if result else 0
     
     # Get completed tasks count for each day
-    cursor.execute('''
+    execute_query(cursor, '''
         SELECT day_number, COUNT(*) as completed_count
         FROM daily_tasks
         WHERE completed = 1
         GROUP BY day_number
-    ''')
+    ''', [], db_type)
     completed_by_day = {row['day_number']: row['completed_count'] for row in cursor.fetchall()}
     
+    cursor.close()
     conn.close()
     
     summary = {}
@@ -199,13 +295,24 @@ def toggle_day_task(day_number, task_id):
     data = request.json
     completed = data.get('completed', False)
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT OR REPLACE INTO daily_tasks (day_number, task_id, completed)
-        VALUES (?, ?, ?)
-    ''', (day_number, task_id, 1 if completed else 0))
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    
+    if db_type == 'postgresql':
+        execute_query(cursor, '''
+            INSERT INTO daily_tasks (day_number, task_id, completed)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (day_number, task_id) 
+            DO UPDATE SET completed = EXCLUDED.completed
+        ''', (day_number, task_id, 1 if completed else 0), db_type)
+    else:
+        execute_query(cursor, '''
+            INSERT OR REPLACE INTO daily_tasks (day_number, task_id, completed)
+            VALUES (?, ?, ?)
+        ''', (day_number, task_id, 1 if completed else 0), db_type)
+    
     conn.commit()
+    cursor.close()
     conn.close()
     
     return jsonify({'success': True})
@@ -219,13 +326,25 @@ def update_day_notes(day_number):
     start_date = datetime.now().date()
     task_date = start_date + timedelta(days=day_number - 1)
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT OR REPLACE INTO day_notes (day_number, date, notes)
-        VALUES (?, ?, ?)
-    ''', (day_number, task_date.isoformat(), notes))
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
+    
+    if db_type == 'postgresql':
+        execute_query(cursor, '''
+            INSERT INTO day_notes (day_number, date, notes)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (day_number) 
+            DO UPDATE SET notes = EXCLUDED.notes, date = EXCLUDED.date
+        ''', (day_number, task_date, notes), db_type)
+    else:
+        # SQLite uses TEXT for date, convert to string
+        execute_query(cursor, '''
+            INSERT OR REPLACE INTO day_notes (day_number, date, notes)
+            VALUES (?, ?, ?)
+        ''', (day_number, task_date.isoformat(), notes), db_type)
+    
     conn.commit()
+    cursor.close()
     conn.close()
     
     return jsonify({'success': True})
@@ -234,14 +353,16 @@ def update_day_notes(day_number):
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Get statistics"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    conn, db_type = get_db_connection()
+    cursor = get_cursor(conn, db_type)
     
     # Get total number of tasks
-    cursor.execute('SELECT COUNT(*) as total FROM tasks_list')
-    total_tasks = cursor.fetchone()['total'] or 0
+    execute_query(cursor, 'SELECT COUNT(*) as total FROM tasks_list', [], db_type)
+    result = cursor.fetchone()
+    total_tasks = result['total'] if result else 0
     
     if total_tasks == 0:
+        cursor.close()
         conn.close()
         return jsonify({
             'completed_days': 0,
@@ -251,17 +372,18 @@ def get_stats():
         })
     
     # Count days with all tasks completed
-    cursor.execute('''
+    execute_query(cursor, '''
         SELECT dt.day_number, 
                COUNT(DISTINCT dt.task_id) as completed_count
         FROM daily_tasks dt
         WHERE dt.completed = 1
         GROUP BY dt.day_number
-        HAVING completed_count = ?
-    ''', (total_tasks,))
+        HAVING COUNT(DISTINCT dt.task_id) = %s
+    ''', (total_tasks,), db_type)
     
     completed_days = len(cursor.fetchall())
     
+    cursor.close()
     conn.close()
     
     return jsonify({

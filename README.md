@@ -38,13 +38,20 @@ http://localhost:5001
 
 ## Database
 
-The application uses SQLite database (`100day_challenge.db`) to store:
-- Day number
-- Date
-- Completion status
-- Notes
+The application uses **Supabase (PostgreSQL)** to store data persistently:
+- Tasks list
+- Daily task completion status
+- Day notes
 
-The database is automatically created when you first run the application.
+**Setup Supabase:**
+
+1. Go to your Supabase project: https://supabase.com/dashboard/project/pjjuiyfphwdopdotukpb
+2. Navigate to **Settings** → **Database**
+3. Find **Connection string** → **URI**
+4. Copy the connection string (format: `postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:5432/postgres`)
+5. Set it as environment variable `DATABASE_URL`
+
+The database tables are automatically created when you first run the application.
 
 ## Project Structure
 
@@ -57,12 +64,11 @@ The database is automatically created when you first run the application.
 ├── .gitignore         # Git ignore file
 ├── templates/          # HTML templates
 │   └── index.html
-├── static/            # Static files
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       └── app.js
-└── 100day_challenge.db # SQLite database (created automatically)
+└── static/            # Static files
+    ├── css/
+    │   └── style.css
+    └── js/
+        └── app.js
 ```
 
 ## Deployment to Render
@@ -91,6 +97,9 @@ This application is ready to deploy on [Render](https://render.com).
 3. **Set Environment Variables:**
    - Click "Environment" tab
    - Add `SECRET_KEY`: Generate a random string (e.g., use `openssl rand -hex 32`)
+   - Add `DATABASE_URL`: Your Supabase connection string
+     - Get it from: https://supabase.com/dashboard/project/pjjuiyfphwdopdotukpb → Settings → Database → Connection string (URI)
+     - Format: `postgresql://postgres:[PASSWORD]@db.xxx.supabase.co:5432/postgres`
    - `PORT` is automatically set by Render (no need to add)
 
 4. **Deploy:**
@@ -104,10 +113,7 @@ This application is ready to deploy on [Render](https://render.com).
 
 ### Important Notes
 
-- **Database Persistence**: SQLite database files on Render's free tier are **ephemeral** (will be deleted when the service restarts). For production use, consider:
-  - Upgrading to a paid plan with persistent disk
-  - Using Render's PostgreSQL database (requires code changes)
-  - Using an external database service
+- **Database**: Using Supabase (PostgreSQL) ensures data persistence. Your data will not be lost when the service restarts.
 
 - **Auto-deploy**: Render automatically deploys on every push to your main branch
 
